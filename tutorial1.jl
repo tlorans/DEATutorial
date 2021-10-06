@@ -14,7 +14,7 @@ macro bind(def, element)
 end
 
 # ╔═╡ ae0f4b49-de27-4ec1-8d3e-de41a6b95abb
-using PlutoUI, Plots, LaTeXStrings
+using PlutoUI, Plots, LaTeXStrings, Distributions, NamedArrays, JuMP, COSMO, DataEnvelopmentAnalysis
 
 # ╔═╡ 1bb58003-a908-4658-bce9-67b892cec480
 html"<button onclick='present()'>present</button>"
@@ -42,72 +42,315 @@ Acknowledgements: The structure and technical proofs of this tutorial comes from
 
 # ╔═╡ 6bf52b00-1881-11ec-2ec9-85c3a45c0752
 md"""
-# How to Evaluate Performance?
-+ What is Performance?
-+ Descriptive vs. Normative Measurement of Performance
-+ Why Do We Need a Particular Methodology to Evaluate Performance?
+# Evaluating Firms Environmental Performance
++ What is Environmentals?
++ What is Environmental Performance?
++ How to Evaluate Performance? A Simple Approach
++ Parametric vs. Non-Parametric Approach
++ The Absence of Market Prices
 + Data Envelopment Analysis
 + DataEnvelopmentAnalysis.jl
 """
 
 # ╔═╡ 4d6245c1-566d-4f90-9083-0a61d119dbed
 md"""
-# What is Performance?
+## What is Environmentals?
 
-Any decision-making problem faced by an agent has three basic features:
-+ The _choice_ or _decision variables_
-+ The _restrictions_ or _constraints_
-+ Some _criterion function_
+Let's start with the Environmentals issues listing from the _Value Balancing Alliance_:
++ Greenhouse gas emissions
++ Air pollution
++ Water consumption
++ Water pollution
++ Land use
++ Waste
 
+"""
 
+# ╔═╡ 7b32a506-aae5-4af5-ad1f-3a16301d7a2c
+md"""
+## What is a Firm Environmental Performance?
+
+Let's simply define a firm environmental performance:
++ Environmentals are inputs used in the production process
++ Sales are the output from the production process
++ Taking an input-focused approach: for a sales value, the closer the actual environmentals consumption from the minimum value attainable is, the greater is its environmental performance
 """
 
 # ╔═╡ 3e0dc5d4-ee2b-462a-8f39-ba15c164b5a7
 md"""
-## Descriptive vs. Normative Measurement of Performance
+## Descriptive vs. Normative Measurement of Environmental Performance
 Two concepts are commonly used to characterize performance:
 + Productivity
 + Efficiency
-However, these two concepts are fundamentally different!
+However, these two concepts are fundamentally different.
 **Productivity** is a **descriptive** measure of performance while **efficiency** is a **normative** one.
 """
 
+# ╔═╡ b84cfdb6-855b-4c13-871c-a495a68495a3
+@bind slider_sales_A Slider(1:20, default = 6)
+
+# ╔═╡ 13df1f5c-07a7-4528-8dcc-cf650faa520c
+@bind slider_GHG_A Slider(1000:1000:20000, default = 2000)
+
+# ╔═╡ d36b49c9-f9b7-4e60-a084-ce7569544fd0
+@bind slider_sales_B Slider(1:20, default = 3)
+
+# ╔═╡ 66ed22ac-a715-4ecb-98be-66403e62b486
+@bind slider_GHG_B Slider(1000:1000:20000, default = 2000)
+
+# ╔═╡ 210a0931-91e4-4a4e-8ed4-1be890455b3f
+md"""
+## Productivity as a Descriptive Measurement of Environmental Performance
+
+Let's take an example with the 2 companies: 
++ Company A's Sales are at $slider_sales_A million USD
++ Company A's GHG emissions stand at $slider_GHG_A tonnes of C02 equivalent
++ Company B's Sales are at $slider_sales_B million USD
++ Company B's GHG emissions stand at $slider_GHG_B tonnes of C02 equivalent
+
+"""
+
+# ╔═╡ 4e7045a5-5b82-4af1-9199-f06c99e2692d
+begin
+	AP_A = round(slider_sales_A / slider_GHG_A; digits = 4);
+	AP_B = round(slider_sales_B / slider_GHG_B; digits = 4);
+end;
+
+# ╔═╡ 7ac93c3e-7385-49e3-8a03-bbfebeb862b0
+md"""
+In that case, what is average productivity?
+Well, because we supposed this is a single-output / single-output technology, the **average productivity is as simple as the ratio of the output and the input**:
+
+``AP_A = \frac{y_A}{x_A}= ``$AP_A
+
+``AP_B = \frac{y_B}{x_B}= ``$AP_B
+
+But, looking at each average productivity independently, it doesn't say anything about the environmental performance: this is a descriptive measure only!
+To get a sense of the environmental performance, one should compare company A and company B average productivies for example.
+"""
+
+# ╔═╡ 5c88a644-473f-4f81-87bd-b2a5856a539c
+@bind slider_GHG_min Slider(500:100:2000, default = 600)
+
 # ╔═╡ 533fd3d5-dce3-4d87-b251-09ed696fb9d1
 md"""
-## Efficiency as a Normative Measurement of Performance
+## Efficiency as a Normative Measurement of Environmental Performance
 
-Now let's imagine we do know the technology in the sector where these firms operates, which is describe by a production function:
+Now let's imagine we do know the **technology** (that is, in our case, how much GHG needs to be emitted at the minimum level for the production process) in the sector where these firms operates, which is describe by a production function:
 
-``y^* = f(x)``
+``x^* = f(y)``
 
-Where ``y^*`` is the maximum producible output from the input ``x``.
-We can measure **the technical efficiency of a firm by comparing its actual output with the maximum producible quantity from its input.** As we are targeting the maximum producible outputs, this is an **output-oriented** measure of efficiency.
+Where ``x^*`` is the minimum GHG emissions level for a Sales amount.
+We can measure **the efficiency of a firm by comparing its actual GHG emissions with the minimum level of GHG emissions for the same Sales amount.** As we are targeting the mininimum GHG emissions level or input consumption here, this is an **input-oriented** or **input-saving** measure of efficiency.
 
 Doing so, we are **evaluating** the performance of the firm.
-"""
 
-# ╔═╡ 56fa8ff1-99b6-49d9-ac9c-9ab47a213c58
-md"""
-## Technical Efficiency Measurement
-Then, suppose we know the maximum producible outputs with input amount used by firm A and B.
-"""
+Let's define a value for ``x_A^*`` (_ie._ the minimum GHG emissions for the same level of Sales than company A) as an illustration:
 
-# ╔═╡ a51c1392-315e-4dfd-857d-9c9d33cba642
-md"""
-This means that, according to the production function, we know that the maximum producible output amount according to the observed input used:
+``x_A^* = `` $slider_GHG_min
 """
 
 # ╔═╡ 8642a6f6-0185-4f07-8689-725356c7b2c7
 md"""
-**The closer the technical efficiency is to 1, the more efficient the firm is**.
+**The closer the efficiency is to 1, the more efficient the firm is**.
 """
 
-# ╔═╡ 95fa9193-1907-42d4-aeda-8e4e6593f0f5
+# ╔═╡ 5319b650-e0a4-40ec-b0de-39a542142e16
+begin
+	TE_A =  slider_GHG_min / slider_GHG_A 
+	TE_B = slider_GHG_min / slider_GHG_B
+end;
+
+# ╔═╡ 70b18cb1-56f0-4d08-b29e-ff8259fd7886
 md"""
-Then, the technical efficiency of a firm is its productivity index relative to a hypothetical firm producing the maximum output possible from the same input quantity that the observed firm is using, such as:
+Which gives the following efficiency value for our company A:
 
-``TE^A_O = \Pi_{A,A^*}``
+``E_A = \frac{x^*_A}{x_A} = `` $TE_A
 
+"""
+
+# ╔═╡ 4c33d74d-4a48-4be7-b1f0-8fd9edcf19a8
+md"""
+## How to Compute Efficiency in Practice?
+We said that, contrary to the average productivity, one should know the underlying technology in order to compute efficiency (_ie._ what is the minimum level of GHG emissions for a certain amount of Sales in our case). We've also addressed the simple one Environmental issue (namely GHG emissions) so far, but there are multiple Environmental issues.
+
+We will take a look at two commonly used but different approaches:
++ A _Scoring_ approach, based on _Gaussian distribution_
++ A _Data Envelopment Analysis_ approach, based on the concept of _Efficiency Frontier_
+For each indicator, we will take a look at:
++ How does the _Technology_ is estimated?
++ How to analyze the performance regarding multiple Environmentals issues?
+"""
+
+# ╔═╡ c86b8a58-5f84-42cf-b4ea-2d0a638588aa
+md"""
+## The Scoring Approach
+
+The common scoring approach can be described as computing efficiency through relative productivity index. 
+
+The idea is the following: starting from the average productivity, one can build a normative measure by comparing the average productivity to the distribution of the other companies average productivities.
+
+
+"""
+
+# ╔═╡ d59e0941-5b9f-40a4-8b52-f05e0df7494b
+md"""
+## Determining Technology with Scoring: a Parametric Approach
+
+You need to specify the probability distribution.
+"""
+
+# ╔═╡ 2561df55-6aea-430f-9466-4c4a52a54990
+md"""
+## Multiple Inputs Case with the Scoring Approach
+"""
+
+# ╔═╡ 8ef5645f-c477-473c-9de9-d0c4c4bca856
+md"""
+## Data Envelopment Analysis Approach
+
+
+Charnes, Cooper and Rhodes (1978, 1981) introduced the method of _Data Envelopment Analysis_ (DEA) to address the problem of efficiency measurement for *decision-making units* (DMUs) with multiple inputs and multiple outputs in the absence of market prices. 
+
+Decision-making units is a term including nonmarket agents, like schools, or hospitals, producing identifiable and measurable outputs from measurable inputs, but lacking market prices of outputs and / or inputs. 
+"""
+
+# ╔═╡ 231d83b3-6706-4823-9cff-f0895a1dabc7
+md"""
+## Determining Technology with DEA: a Non-Parametric Approach (1/2)
+
+In DEA, an **efficiency frontier** is constructed from the observed GHG emissions / Sales combinations of the firms in the sample, with no specification of an explicit form of the production function. The **frontier efficiency will be built upon the combination of firms located on the efficiency frontier**.
+Let's take an example:
+"""
+
+# ╔═╡ b29369e6-d184-4741-ad57-739af4c9677f
+begin
+	companies = [string("Company ",i) for i in 1:5]
+	col_names = ["Sales","GHG emissions"]
+	sales = rand(1:1:20, length(companies))
+	emissions = rand(1000:500:10000, length(companies))
+	data_single_case = NamedArray([sales emissions], (companies, col_names), ("Firm", "Variable"))
+	data_single_case[:,"Sales"] = round.(data_single_case[:,"Sales"] / mean(data_single_case[:,"Sales"]) * 1000; digits = 0)
+
+	data_single_case[:,"GHG emissions"] = round.(data_single_case[:,"GHG emissions"] / mean(data_single_case[:,"GHG emissions"]) * 1000; digits = 0)
+	data_single_case
+end
+
+# ╔═╡ 84b1e005-ea4f-46f6-a2f1-4919897268a4
+md"""
+Let's see the model for each company:
+
+"""
+
+# ╔═╡ 8515eb6f-cac7-4eca-a02e-fb1f07607324
+@bind company_i Slider(1:1:5, default = 1)
+
+# ╔═╡ 21040d14-f76c-48bb-8f17-da152450e609
+begin
+	# split 
+	X = data_single_case[:,["GHG emissions"]]
+	Y = data_single_case[:,["Sales"]]
+	
+	# number of inputs
+	m = size(X,2)
+	# number of outputs
+	s = size(Y,2)
+	
+	# Declare the model
+	i = company_i
+	
+	# value of input and output to evaluate
+	x0 = X[[i],:]
+	y0 = Y[[i],:]
+	
+	# number of companies
+	n = 5
+	
+	# for results
+	θ_star = NamedArray(zeros(1), ([i]), ("DMU","Efficiency"))
+	λ_star = NamedArray(zeros(1, n), ([i],names(X,1)), ("DMU","Lambda"))
+	
+	# Create the JuMP model
+	deamodel = Model(COSMO.Optimizer)
+	@variable(deamodel, θ)
+	@variable(deamodel, λ[1:n] >= 0)
+	@objective(deamodel, Min, θ)
+	@constraint(deamodel, [x in 1:m], sum(X[t,x] * λ[t] for t in 1:n) <= θ * x0[x])
+	@constraint(deamodel, [y in 1:s], sum(Y[t,y] * λ[t] for t in 1:n) >= y0[y])
+	
+	# Optimize and return the results
+	JuMP.optimize!(deamodel)
+	θ_star[1] = JuMP.objective_value(deamodel)
+	λ_star[1,:] = JuMP.value.(λ)
+	GHG_targets = round(θ_star[1] * x0[1]; digits = 0)
+	# print the model
+	latex_formulation(deamodel)
+end
+
+
+# ╔═╡ d057a510-f3ea-45f2-9194-87d4c671e988
+printed_theta = round(θ_star[1]; digits = 2);
+
+# ╔═╡ 49a30cab-45fe-4ff7-b78f-0badee3c2122
+md"""
+## Determining Technology with DEA: a Non-Parametric Approach (2/2)
+The optimal solution is for company $company_i :
+
+``\theta^* = `` $printed_theta
+
+Given the Sales amount of the company, the company should emit ``GHG ^* = \theta^* * GHG_A =``$GHG_targets tonnes of CO2 eq in order to be efficient.
+
+And:
+"""
+
+# ╔═╡ 2aacf9af-b3f5-4637-bd57-ad2723c3d0d0
+begin
+	if printed_theta > 0.9
+		efficient_or_not = "efficient as it is close or on the efficient frontier"
+	else
+		efficient_or_not = "is not efficient because it is far from the efficient frontier"
+	end
+	benchmark_weight = round(maximum(λ_star); digits = 2)*100
+	company_eff = argmax(λ_star)[2]
+	λ_star
+end
+
+# ╔═╡ 280cff5e-5be0-4362-972d-e6c033cdeafd
+md"""
+The efficient frontier for company $company_i correspond to a virtual company $company_i``^*`` which is built with $benchmark_weight% of company $company_eff.
+"""
+
+# ╔═╡ debae212-c156-47bd-b78a-01244febe926
+md"""
+Hopefully, this single input (GHG emissions) single output (Sales) can be represented graphically:
+"""
+
+# ╔═╡ 4b3eaa5e-9fda-4e24-81ee-aaaad80aaa24
+begin
+	dea_model_single_case = dea(Matrix(X), Matrix(Y), optimizer = DEAOptimizer(COSMO.Optimizer), orient = :Input, rts = :CRS)
+	targets_X = targets(dea_model_single_case, :X)
+
+end;
+
+# ╔═╡ 14beb5b4-e92a-4c70-adf8-9a30c3d0dd70
+begin
+	targets_X_narray = NamedArray(targets_X, (companies, ["Target"]))
+	data_for_graph = hcat(data_single_case, targets_X_narray)
+	data_for_graph = data_for_graph[sortperm(data_for_graph[:, 2]), :]
+	scatter(data_for_graph[:,2], data_for_graph[:,1], marker =:square, label = false, xlabel = "GHG Emissions", ylabel = "Sales")
+	plot!(data_for_graph[:,3], data_for_graph[:,1], ylims = (0, maximum(data_for_graph[:,1]) + 1000), label = "Efficiency Frontier")
+	scatter!(data_for_graph[:,3], data_for_graph[:,1], label = "Virtual Companies")
+end
+
+# ╔═╡ d19488e9-4cf5-4c9f-b70b-c57ba868a60f
+md"""
+## Multiple Inputs Case with the DEA Approach: the Concept of Shadow Prices
+
+If the case with only GHG emissions as an input and Sales as an output is quite straightforward, DEA is more usefull in the case of multiple environmentals issues.
+
+Indeed, if we consider the case where we want to analyze the environmental performance of a firm regarding both GHG emissions and Water consumption for example, one should consider how to suitably aggregate these issues.
+
+In the absence of market prices, such as the case for Environmentals, the method of DEA can endogenously generates "_shadow prices_" for each issue. 
 """
 
 # ╔═╡ 80bf800d-dbd0-4786-ab04-1900acfde278
@@ -125,151 +368,6 @@ However, to determine the efficiency of the firm A, we need to know ``P_A^*`` me
 Location of this reference point depends on the production function ``f(x)``. The production function ``y = f(x)`` is the **frontier of the production possibility** defined by the technology. Points ``P_A^*`` and ``P_B^*`` are **vertical projections** of the points ``P_A`` and ``P_B`` onto the frontier.
 
 In both cases, observed input amount are unchanged and the output level is expanded till we reach the frontier.
-"""
-
-# ╔═╡ a6c9df5b-638f-4f5d-8dc8-5b77987d77a1
-md"""
-Now let's play around and define a new ``y_A`` with the slider below:
-"""
-
-# ╔═╡ 79103498-20f7-44b3-98f9-8392edbae08e
-@bind slider_y_A Slider(1:20, default = 6)
-
-# ╔═╡ e7094a2c-2a82-4304-ac77-1d406eabd72f
-md"""
-And same with ``y_B``!
-"""
-
-# ╔═╡ bc0c5077-2db9-4046-aefb-28436b061400
-@bind slider_y_B Slider(1:20, default = 8)
-
-# ╔═╡ d6565d00-8c19-4f38-86f4-ceaece1e578d
-begin
-	x_A = 16
-	y_A = slider_y_A
-	x_B = 64
-	y_B = slider_y_B
-end;
-
-# ╔═╡ 210a0931-91e4-4a4e-8ed4-1be890455b3f
-md"""
-## Productivity as a Descriptive Measurement of Performance
-
-Let's take an example with the 2 companies: company A producing $y_A unities of the output ``y_A`` with $x_A unities of the input ``x_A`` and the company B producing $y_B unities of the output ``y_B`` with $x_B unities of the input ``x_B``.
-"""
-
-# ╔═╡ 6e37b527-071a-44bd-ab65-a4175c651592
-begin
-	AP_A = round(y_A / x_A; digits = 4);
-	AP_B = round(y_B / x_B; digits = 4);
-	Pi_A_B = round(AP_A / AP_B; digits = 4);
-end;
-
-# ╔═╡ 7ac93c3e-7385-49e3-8a03-bbfebeb862b0
-md"""
-Of course, one would not measure performance of company based on the absolute value of production, but should take into account the amount of input used in that production process instead. We rather should (at least) measure the average productivity.
-
-In that case, what is average productivity?
-Well, because we supposed this is a single-output / single-output technology, the **average productivity is as simple as the ratio of the output and the input**:
-
-``AP_A = \frac{y_A}{x_A}= ``$AP_A
-
-``AP_B = \frac{y_B}{x_B}= ``$AP_B
-
-"""
-
-# ╔═╡ 0e859b74-3edb-4336-88cb-1bcf91ca65d0
-md"""
-## Relative Productivity
-The average productivity of the company A is higher than the average productivity in the company B.
-We can even measure the productivity index of the company A relative to the company B. To do so, we just have to compute the ratio of the average productivity of A to the average productivity of B:
-
-``\Pi_{A,B} = \frac{AP_A}{AP_B} = ``$Pi_A_B
-
-The higher this productivity index goes beyond unity, the more productive is company A compared to company B.
-"""
-
-# ╔═╡ 14034f84-fd6d-470a-8c56-bdbfb92be3ed
-md"""
-Hence, the firm A is around $Pi_A_B times as productive as firm B.
-
-In this single-output single-input example, we do not need to know the technology (the possible input-output combinations) to measure the absolute or relative productivity of the firm. Indeed, we do not need to know anything about the maximum output value producible with the same amount of input.
-
-Then, the average productivity **describes** the performance of firms A and B, **without evaluating it**.
-"""
-
-
-# ╔═╡ 23d4d2af-152a-4b61-93b7-e7592fb63c11
-md"""
-What if we move ``y^*_A``?
-"""
-
-# ╔═╡ 3bab3f20-50c5-4beb-a35d-444da1db238e
-@bind slider_y_star_A Slider(0:10, default = 4)
-
-# ╔═╡ 09edf76b-a194-4cd2-8851-7a730a70b16d
-md"""
-And ``y^*_B``?
-"""
-
-# ╔═╡ 43c4dd4a-479c-42e0-987b-804eb0a19d1d
-@bind slider_y_star_B Slider(0:10, default = 6)
-
-# ╔═╡ 09bffe19-339c-438d-901d-19e3550a840a
-begin
-	y_star_A = y_A + slider_y_star_A;
-	y_star_B = y_B + +slider_y_star_B;
-end;
-
-# ╔═╡ 514b039e-94cf-462b-b78f-53cd7e5e52ab
-md"""
-``
-y_{A}^* = f(x_A) = ``$y_star_A
-
-``
-y_{B}^* = f(x_B) = ``$y_star_B
-
-"""
-
-# ╔═╡ fe2f14a9-0beb-429c-8aba-37ea9d83c07a
-TE_A_O = round(y_A / y_star_A; digits = 4);
-
-# ╔═╡ d1f0f756-4e87-4e0f-b80b-2516e83e3d01
-TE_B_O = round(y_B / y_star_B; digits = 4);
-
-# ╔═╡ 5dd98c60-d089-4d91-9e72-ac548cfcb5da
-md"""
-We can measure the technical efficiency of a firm by comparing its actual output with the maximum producible quantity from its observed input: this is an output-oriented measure of efficiency.
-We then have:
-
-``
-TE^A_O = \frac{y_A}{y_A^*} = ``$TE_A_O
-
-``
-TE^B_O = \frac{y_B}{y_B^*} = ``$TE_B_O
-
-"""
-
-# ╔═╡ 8d00ff43-fcd9-43e1-bdbd-9f08d0a4b450
-AP_star_A = y_star_A / x_A;
-
-# ╔═╡ 479fb280-efe4-4738-8a0b-2f673b37e6ed
-md"""
-## Technical Efficiency & Average Productivity
-An alternative way to think about technical efficiency is the following:
-
-+ Suppose that firm A produced the maximum producible output from the amount of input it used, its average productivity would have been:
-``AP_A^* = \frac{y_A^*}{x_A} = ``$AP_star_A
-
-"""
-
-# ╔═╡ 3a384c42-86f7-4b38-8d75-651d54acb0e9
-TE_A_0 =round( AP_A / AP_star_A; digits = 4);
-
-# ╔═╡ 7821d6ce-c95b-40f8-9bab-04a00d1f6a8b
-md"""
-+ Thus, an alternative way to measure its output-oriented technical efficiency is:
-``TE^A_O = \frac{AP_A}{AP_A^*} = ``$TE_A_0
 """
 
 # ╔═╡ 46c3247f-5fd2-427e-a77d-34a992497825
@@ -291,6 +389,38 @@ begin
 	scatter!([x_B],[y_star_B], marker =:square, label = L"P_B^*")
 end
 
+# ╔═╡ a6c9df5b-638f-4f5d-8dc8-5b77987d77a1
+md"""
+Now let's play around and define a new ``y_A`` with the slider below:
+"""
+
+# ╔═╡ 79103498-20f7-44b3-98f9-8392edbae08e
+@bind slider_y_A Slider(1:20, default = 6)
+
+# ╔═╡ e7094a2c-2a82-4304-ac77-1d406eabd72f
+md"""
+And same with ``y_B``!
+"""
+
+# ╔═╡ bc0c5077-2db9-4046-aefb-28436b061400
+@bind slider_y_B Slider(1:20, default = 8)
+
+# ╔═╡ 23d4d2af-152a-4b61-93b7-e7592fb63c11
+md"""
+What if we move ``y^*_A``?
+"""
+
+# ╔═╡ 3bab3f20-50c5-4beb-a35d-444da1db238e
+@bind slider_y_star_A Slider(0:10, default = 4)
+
+# ╔═╡ 09edf76b-a194-4cd2-8851-7a730a70b16d
+md"""
+And ``y^*_B``?
+"""
+
+# ╔═╡ 43c4dd4a-479c-42e0-987b-804eb0a19d1d
+@bind slider_y_star_B Slider(0:10, default = 6)
+
 # ╔═╡ bf5e03fd-2bb4-4c47-a03f-0e6beab6b29e
 md"""
 Then take a look at the previous formula and see what are the new technical efficiency measurements!
@@ -308,31 +438,9 @@ md"""
 Let's define ``x_A^*``:
 """
 
-# ╔═╡ fe7004cf-c5cb-4ba0-9e9e-5e411183913c
-@bind x_star_A_slider Slider(1:x_A)
-
 # ╔═╡ d4580ae3-5e82-4afa-8c66-e19099706ec7
 md"""
 And ``x_B^*``:
-"""
-
-# ╔═╡ 63e78cdb-afc4-437e-93f2-3f13cdb17983
-@bind x_star_B_slider Slider(1:x_B)
-
-# ╔═╡ 63bfa366-c0c2-403c-91de-12a5623476ce
-begin
-	TE_A_I = round(x_star_A_slider / x_A; digits = 4);
-	TE_B_I = round(x_star_B_slider / x_B; digits = 4);
-end;
-
-# ╔═╡ fffcb1cf-092c-461b-8e94-2890eb69aa88
-md"""
-In that case, technical efficiency measures for the two firms are:
-
-``TE^A_I = \frac{x_A^*}{x_A} = ``$TE_A_I
-
-``TE^B_I = \frac{x_B^*}{x_B} = ``$TE_B_I
-
 """
 
 # ╔═╡ bf84d0b3-20c5-4678-8cb9-4c409a336896
@@ -430,23 +538,6 @@ md"""
 Based on these assumptions (and some more regarding the returns to scale status, will see it later), **it is possible to construct a production possibility set from the observed data by linear programming, without any explicit specification of a production function!**
 """
 
-# ╔═╡ f4ccc737-bc7d-4658-bf86-1e1d3d0b979b
-md"""
-## Data Envelopment Analysis
-
-Charnes, Cooper and Rhodes (1978, 1981) introduced the method of Data Envelopment Analysis (DEA) to address the problem of efficiency measurement for *decision-making units* (DMUs) with multiple inputs and multiple outputs in the absence of market prices. 
-
-Decision-making units is a term including nonmarket agents, like schools, or hospitals, producing identifiable and measurable outputs from measurable inputs, but lacking market prices of outputs and / or inputs. 
-"""
-
-# ╔═╡ fcd00dc8-02ee-45e3-b36b-7b5bc03caa28
-md"""
-Let's consider an example with 6 firms ``A,B,C,D,E,F``:
-"""
-
-# ╔═╡ 6b6e2371-454d-403b-a6a0-a977cc0afb48
-A_inputs = [2, 3]
-
 # ╔═╡ f994ab44-d916-4b04-a3fd-629235c7d5e6
 
 
@@ -504,19 +595,41 @@ A_inputs = [2, 3]
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+COSMO = "1e616198-aa4e-51ec-90a2-23f7fbd31d8d"
+DataEnvelopmentAnalysis = "a100299e-89d6-11e9-0fa0-2daf497e6a05"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
+NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 
 [compat]
+COSMO = "~0.8.1"
+DataEnvelopmentAnalysis = "~0.6.0"
+Distributions = "~0.25.18"
+JuMP = "~0.21.10"
 LaTeXStrings = "~1.2.1"
-Plots = "~1.22.1"
-PlutoUI = "~0.7.9"
+NamedArrays = "~0.9.6"
+Plots = "~1.22.4"
+PlutoUI = "~0.7.14"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
+
+[[AMD]]
+deps = ["Libdl", "LinearAlgebra", "SparseArrays", "Test"]
+git-tree-sha1 = "fc66ffc5cff568936649445f58a55b81eaf9592c"
+uuid = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
+version = "0.4.0"
+
+[[ASL_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "370cafc70604b2522f2c7cf9915ebcd17b4cd38b"
+uuid = "ae81ac8f-d209-56e5-92de-9978fef736f9"
+version = "0.1.2+0"
 
 [[Adapt]]
 deps = ["LinearAlgebra"]
@@ -533,11 +646,40 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 [[Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
+[[BenchmarkTools]]
+deps = ["JSON", "Logging", "Printf", "Profile", "Statistics", "UUIDs"]
+git-tree-sha1 = "61adeb0823084487000600ef8b1c00cc2474cd47"
+uuid = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+version = "1.2.0"
+
+[[BinaryProvider]]
+deps = ["Libdl", "Logging", "SHA"]
+git-tree-sha1 = "ecdec412a9abc8db54c0efc5548c64dfce072058"
+uuid = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
+version = "0.5.10"
+
 [[Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "19a35467a82e236ff51bc17a3a44b69ef35185a2"
 uuid = "6e34b625-4abd-537c-b88f-471c36dfa7a0"
 version = "1.0.8+0"
+
+[[CEnum]]
+git-tree-sha1 = "215a9aa4a1f23fbd05b92769fdd62559488d70e9"
+uuid = "fa961155-64e5-5f13-b03f-caf6b980ea82"
+version = "0.4.1"
+
+[[COSMO]]
+deps = ["AMD", "COSMOAccelerators", "DataStructures", "IterTools", "LinearAlgebra", "MathOptInterface", "Pkg", "Printf", "QDLDL", "Random", "Reexport", "Requires", "SparseArrays", "Statistics", "SuiteSparse", "Test", "UnsafeArrays"]
+git-tree-sha1 = "364b4495ef937ce5bad347bf04e9369f292aaae0"
+uuid = "1e616198-aa4e-51ec-90a2-23f7fbd31d8d"
+version = "0.8.1"
+
+[[COSMOAccelerators]]
+deps = ["LinearAlgebra", "Random", "SparseArrays", "Test"]
+git-tree-sha1 = "b1153b40dd95f856e379f25ae335755ecc24298e"
+uuid = "bbd8fffe-5ad0-4d78-a55e-85575421b4ac"
+version = "0.1.0"
 
 [[Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
@@ -545,11 +687,35 @@ git-tree-sha1 = "f2202b55d816427cd385a9a4f3ffb226bee80f99"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+0"
 
+[[Calculus]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
+uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
+version = "0.5.1"
+
+[[ChainRulesCore]]
+deps = ["Compat", "LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "a325370b9dd0e6bf5656a6f1a7ae80755f8ccc46"
+uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+version = "1.7.2"
+
+[[CodecBzip2]]
+deps = ["Bzip2_jll", "Libdl", "TranscodingStreams"]
+git-tree-sha1 = "2e62a725210ce3c3c2e1a3080190e7ca491f18d7"
+uuid = "523fee87-0ab8-5b00-afb7-3ecf72e48cfd"
+version = "0.7.2"
+
+[[CodecZlib]]
+deps = ["TranscodingStreams", "Zlib_jll"]
+git-tree-sha1 = "ded953804d019afa9a3f98981d99b33e3db7b6da"
+uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
+version = "0.7.0"
+
 [[ColorSchemes]]
 deps = ["ColorTypes", "Colors", "FixedPointNumbers", "Random"]
-git-tree-sha1 = "9995eb3977fbf67b86d0a0a0508e83017ded03f2"
+git-tree-sha1 = "a851fec56cb73cfdf43762999ec72eff5b86882a"
 uuid = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
-version = "3.14.0"
+version = "3.15.0"
 
 [[ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
@@ -563,11 +729,22 @@ git-tree-sha1 = "417b0ed7b8b838aa6ca0a87aadf1bb9eb111ce40"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.8"
 
+[[Combinatorics]]
+git-tree-sha1 = "08c8b6831dc00bfea825826be0bc8336fc369860"
+uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+version = "1.0.2"
+
+[[CommonSubexpressions]]
+deps = ["MacroTools", "Test"]
+git-tree-sha1 = "7b8a93dba8af7e3b42fecabf646260105ac373f7"
+uuid = "bbf7d656-a473-5ed7-a52c-81e309532950"
+version = "0.3.0"
+
 [[Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "SHA", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "4866e381721b30fac8dda4c8cb1d9db45c8d2994"
+git-tree-sha1 = "31d0151f5716b655421d9d75b7fa74cc4e744df2"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "3.37.0"
+version = "3.39.0"
 
 [[CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -580,9 +757,15 @@ uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.5.7"
 
 [[DataAPI]]
-git-tree-sha1 = "bec2532f8adb82005476c141ec23e921fc20971b"
+git-tree-sha1 = "cc70b17275652eb47bc9e5f81635981f13cea5c8"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
-version = "1.8.0"
+version = "1.9.0"
+
+[[DataEnvelopmentAnalysis]]
+deps = ["GLPK", "InvertedIndices", "Ipopt", "JuMP", "LinearAlgebra", "Printf", "ProgressMeter", "SparseArrays", "Statistics", "StatsBase"]
+git-tree-sha1 = "1963d200ee80d2f148c07099dbe1be8bded3726a"
+uuid = "a100299e-89d6-11e9-0fa0-2daf497e6a05"
+version = "0.6.0"
 
 [[DataStructures]]
 deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
@@ -603,9 +786,33 @@ uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
 deps = ["Mmap"]
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 
+[[DiffResults]]
+deps = ["StaticArrays"]
+git-tree-sha1 = "c18e98cba888c6c25d1c3b048e4b3380ca956805"
+uuid = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
+version = "1.0.3"
+
+[[DiffRules]]
+deps = ["NaNMath", "Random", "SpecialFunctions"]
+git-tree-sha1 = "7220bc21c33e990c14f4a9a319b1d242ebc5b269"
+uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
+version = "1.3.1"
+
 [[Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
 uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+
+[[Distributions]]
+deps = ["ChainRulesCore", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns"]
+git-tree-sha1 = "ff7890c74e2eaffbc0b3741811e3816e64b6343d"
+uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
+version = "0.25.18"
+
+[[DocStringExtensions]]
+deps = ["LibGit2"]
+git-tree-sha1 = "a32185f5428d3986f47c2ab78b1f216d5e6cc96f"
+uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
+version = "0.8.5"
 
 [[Downloads]]
 deps = ["ArgTools", "LibCURL", "NetworkOptions"]
@@ -635,6 +842,12 @@ git-tree-sha1 = "d8a578692e3077ac998b50c0217dfd67f21d1e5f"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.0+0"
 
+[[FillArrays]]
+deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
+git-tree-sha1 = "29890dfbc427afa59598b8cfcc10034719bd7744"
+uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
+version = "0.12.6"
+
 [[FixedPointNumbers]]
 deps = ["Statistics"]
 git-tree-sha1 = "335bfdceacc84c5cdf16aadc768aa5ddfc5383cc"
@@ -653,6 +866,12 @@ git-tree-sha1 = "8339d61043228fdd3eb658d86c926cb282ae72a8"
 uuid = "59287772-0a20-5a39-b81b-1366585eb4c0"
 version = "0.4.2"
 
+[[ForwardDiff]]
+deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "LinearAlgebra", "NaNMath", "Printf", "Random", "SpecialFunctions", "StaticArrays"]
+git-tree-sha1 = "c4203b60d37059462af370c4f3108fb5d155ff13"
+uuid = "f6369f11-7733-5829-9624-2563aa707210"
+version = "0.10.20"
+
 [[FreeType2_jll]]
 deps = ["Artifacts", "Bzip2_jll", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
 git-tree-sha1 = "87eb71354d8ec1a96d4a7636bd57a7347dde3ef9"
@@ -670,6 +889,22 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Pkg", "Xorg_libXcu
 git-tree-sha1 = "dba1e8614e98949abfa60480b13653813d8f0157"
 uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
 version = "3.3.5+0"
+
+[[GLPK]]
+deps = ["BinaryProvider", "CEnum", "GLPK_jll", "Libdl", "MathOptInterface"]
+git-tree-sha1 = "833dbc8fbb0554e31186df509d67fc2f78f1bb09"
+uuid = "60bf3e95-4087-53dc-ae20-288a0d20c6a6"
+version = "0.14.14"
+
+[[GLPK_jll]]
+deps = ["Artifacts", "GMP_jll", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "01de09b070d4b8e3e1250c6542e16ed5cad45321"
+uuid = "e8aa6df9-e6ca-548a-97ff-1f85fc5b8b98"
+version = "5.0.0+0"
+
+[[GMP_jll]]
+deps = ["Artifacts", "Libdl"]
+uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
 
 [[GR]]
 deps = ["Base64", "DelimitedFiles", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Pkg", "Printf", "Random", "Serialization", "Sockets", "Test", "UUIDs"]
@@ -714,15 +949,26 @@ version = "1.0.2"
 
 [[HTTP]]
 deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
-git-tree-sha1 = "60ed5f1643927479f845b0135bb369b031b541fa"
+git-tree-sha1 = "14eece7a3308b4d8be910e265c724a6ba51a9798"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "0.9.14"
+version = "0.9.16"
 
 [[HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
 git-tree-sha1 = "8a954fed8ac097d5be04921d595f741115c1b2ad"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+0"
+
+[[HypertextLiteral]]
+git-tree-sha1 = "72053798e1be56026b81d4e2682dbe58922e5ec9"
+uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+version = "0.9.0"
+
+[[IOCapture]]
+deps = ["Logging", "Random"]
+git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
+uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
+version = "0.2.2"
 
 [[IniFile]]
 deps = ["Test"]
@@ -733,6 +979,28 @@ version = "0.5.0"
 [[InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+
+[[InvertedIndices]]
+git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
+uuid = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
+version = "1.1.0"
+
+[[Ipopt]]
+deps = ["BinaryProvider", "Ipopt_jll", "Libdl", "LinearAlgebra", "MathOptInterface", "MathProgBase"]
+git-tree-sha1 = "380786b4929b8d18d76e909c6b2eca355b7c3bd6"
+uuid = "b6b21f68-93f8-5de0-b562-5493be1d77c9"
+version = "0.7.0"
+
+[[Ipopt_jll]]
+deps = ["ASL_jll", "Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "MUMPS_seq_jll", "OpenBLAS32_jll", "Pkg"]
+git-tree-sha1 = "82124f27743f2802c23fcb05febc517d0b15d86e"
+uuid = "9cc047cb-c261-5740-88fc-0cf96f7bdcc7"
+version = "3.13.4+2"
+
+[[IrrationalConstants]]
+git-tree-sha1 = "f76424439413893a832026ca355fe273e93bce94"
+uuid = "92d709cd-6900-40b7-9082-c6be49f344b6"
+version = "0.1.0"
 
 [[IterTools]]
 git-tree-sha1 = "05110a2ab1fc5f932622ffea2a003221f4782c18"
@@ -756,11 +1024,23 @@ git-tree-sha1 = "8076680b162ada2a031f707ac7b4953e30667a37"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.2"
 
+[[JSONSchema]]
+deps = ["HTTP", "JSON", "URIs"]
+git-tree-sha1 = "2f49f7f86762a0fbbeef84912265a1ae61c4ef80"
+uuid = "7d188eb4-7ad8-530c-ae41-71a32a6d4692"
+version = "0.3.4"
+
 [[JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "d735490ac75c5cb9f1b00d8b5509c11984dc6943"
 uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
 version = "2.1.0+0"
+
+[[JuMP]]
+deps = ["Calculus", "DataStructures", "ForwardDiff", "JSON", "LinearAlgebra", "MathOptInterface", "MutableArithmetics", "NaNMath", "Printf", "Random", "SparseArrays", "SpecialFunctions", "Statistics"]
+git-tree-sha1 = "4358b7cbf2db36596bdbbe3becc6b9d87e4eb8f5"
+uuid = "4076af6c-e467-56ae-b986-b466b2749572"
+version = "0.21.10"
 
 [[LAME_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -856,8 +1136,26 @@ version = "2.36.0+0"
 deps = ["Libdl"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
+[[LogExpFunctions]]
+deps = ["ChainRulesCore", "DocStringExtensions", "IrrationalConstants", "LinearAlgebra"]
+git-tree-sha1 = "34dc30f868e368f8a17b728a1238f3fcda43931a"
+uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
+version = "0.3.3"
+
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
+
+[[METIS_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "2dc1a9fc87e57e32b1fc186db78811157b30c118"
+uuid = "d00139f3-1899-568f-a2f0-47f597d42d70"
+version = "5.1.0+5"
+
+[[MUMPS_seq_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "METIS_jll", "OpenBLAS32_jll", "Pkg"]
+git-tree-sha1 = "1a11a84b2af5feb5a62a820574804056cdc59c39"
+uuid = "d7ed1dd3-d0ae-5e8e-bfb4-87a502085b8d"
+version = "5.2.1+4"
 
 [[MacroTools]]
 deps = ["Markdown", "Random"]
@@ -868,6 +1166,18 @@ version = "0.5.8"
 [[Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
+
+[[MathOptInterface]]
+deps = ["BenchmarkTools", "CodecBzip2", "CodecZlib", "JSON", "JSONSchema", "LinearAlgebra", "MutableArithmetics", "OrderedCollections", "SparseArrays", "Test", "Unicode"]
+git-tree-sha1 = "575644e3c05b258250bb599e57cf73bbf1062901"
+uuid = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
+version = "0.9.22"
+
+[[MathProgBase]]
+deps = ["LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "9abbe463a1e9fc507f12a69e7f29346c2cdc472c"
+uuid = "fdba3010-5040-5b88-9595-932c9decdf73"
+version = "0.7.8"
 
 [[MbedTLS]]
 deps = ["Dates", "MbedTLS_jll", "Random", "Sockets"]
@@ -896,10 +1206,22 @@ uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 [[MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 
+[[MutableArithmetics]]
+deps = ["LinearAlgebra", "SparseArrays", "Test"]
+git-tree-sha1 = "3927848ccebcc165952dc0d9ac9aa274a87bfe01"
+uuid = "d8a4904e-b15c-11e9-3269-09a3773c0cb0"
+version = "0.2.20"
+
 [[NaNMath]]
 git-tree-sha1 = "bfe47e760d60b82b66b61d2d44128b62e3a369fb"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.5"
+
+[[NamedArrays]]
+deps = ["Combinatorics", "DataStructures", "DelimitedFiles", "InvertedIndices", "LinearAlgebra", "Random", "Requires", "SparseArrays", "Statistics"]
+git-tree-sha1 = "2fd5787125d1a93fbe30961bd841707b8a80d75b"
+uuid = "86f7a689-2022-50b4-a561-43c23ac3c673"
+version = "0.9.6"
 
 [[NetworkOptions]]
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
@@ -910,11 +1232,27 @@ git-tree-sha1 = "7937eda4681660b4d6aeeecc2f7e1c81c8ee4e2f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.5+0"
 
+[[OpenBLAS32_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "ba4a8f683303c9082e84afba96f25af3c7fb2436"
+uuid = "656ef2d0-ae68-5445-9ca0-591084a874a2"
+version = "0.3.12+1"
+
+[[OpenLibm_jll]]
+deps = ["Artifacts", "Libdl"]
+uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
+
 [[OpenSSL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "15003dcb7d8db3c6c857fda14891a539a8f2705a"
 uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
 version = "1.1.10+0"
+
+[[OpenSpecFun_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "13652491f6856acfd2db29360e1bbcd4565d04f1"
+uuid = "efe28fd5-8261-553b-a9e1-b2916fc3738e"
+version = "0.5.5+0"
 
 [[Opus_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -933,11 +1271,17 @@ git-tree-sha1 = "b2a7af664e098055a7529ad1a900ded962bca488"
 uuid = "2f80f16e-611a-54ab-bc61-aa92de5b98fc"
 version = "8.44.0+0"
 
+[[PDMats]]
+deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
+git-tree-sha1 = "4dd403333bcf0909341cfe57ec115152f937d7d8"
+uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
+version = "0.11.1"
+
 [[Parsers]]
 deps = ["Dates"]
-git-tree-sha1 = "438d35d2d95ae2c5e8780b330592b6de8494e779"
+git-tree-sha1 = "a8709b968a1ea6abc2dc1967cb1db6ac9a00dfb6"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "2.0.3"
+version = "2.0.5"
 
 [[Pixman_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -957,21 +1301,21 @@ version = "2.0.1"
 
 [[PlotUtils]]
 deps = ["ColorSchemes", "Colors", "Dates", "Printf", "Random", "Reexport", "Statistics"]
-git-tree-sha1 = "2537ed3c0ed5e03896927187f5f2ee6a4ab342db"
+git-tree-sha1 = "b084324b4af5a438cd63619fd006614b3b20b87b"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
-version = "1.0.14"
+version = "1.0.15"
 
 [[Plots]]
 deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "GeometryBasics", "JSON", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "PlotThemes", "PlotUtils", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs"]
-git-tree-sha1 = "4c2637482176b1c2fb99af4d83cb2ff0328fc33c"
+git-tree-sha1 = "6841db754bd01a91d281370d9a0f8787e220ae08"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-version = "1.22.1"
+version = "1.22.4"
 
 [[PlutoUI]]
-deps = ["Base64", "Dates", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "Suppressor"]
-git-tree-sha1 = "44e225d5837e2a2345e69a1d1e01ac2443ff9fcb"
+deps = ["Base64", "Dates", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
+git-tree-sha1 = "d1fb76655a95bf6ea4348d7197b22e889a4375f4"
 uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-version = "0.7.9"
+version = "0.7.14"
 
 [[Preferences]]
 deps = ["TOML"]
@@ -983,11 +1327,33 @@ version = "1.2.2"
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
+[[Profile]]
+deps = ["Printf"]
+uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
+
+[[ProgressMeter]]
+deps = ["Distributed", "Printf"]
+git-tree-sha1 = "afadeba63d90ff223a6a48d2009434ecee2ec9e8"
+uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
+version = "1.7.1"
+
+[[QDLDL]]
+deps = ["AMD", "LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "417caffa5e8d8de61af9a6bb0ae2a5dcbbdccac3"
+uuid = "bfc457fd-c171-5ab7-bd9e-d5dbfc242d63"
+version = "0.1.4"
+
 [[Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
 git-tree-sha1 = "ad368663a5e20dbb8d6dc2fddeefe4dae0781ae8"
 uuid = "ea2cea3b-5b76-57ae-a6ef-0a8af62496e1"
 version = "5.15.3+0"
+
+[[QuadGK]]
+deps = ["DataStructures", "LinearAlgebra"]
+git-tree-sha1 = "78aadffb3efd2155af139781b8a8df1ef279ea39"
+uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+version = "2.4.2"
 
 [[REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
@@ -1018,6 +1384,18 @@ deps = ["UUIDs"]
 git-tree-sha1 = "4036a3bd08ac7e968e27c203d45f5fff15020621"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.1.3"
+
+[[Rmath]]
+deps = ["Random", "Rmath_jll"]
+git-tree-sha1 = "bf3188feca147ce108c76ad82c2792c57abe7b1f"
+uuid = "79098fc4-a85e-5d69-aa6a-4863f24498fa"
+version = "0.7.0"
+
+[[Rmath_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "68db32dff12bb6127bac73c209881191bf0efbb7"
+uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
+version = "0.3.0+0"
 
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -1054,11 +1432,17 @@ version = "1.0.1"
 deps = ["LinearAlgebra", "Random"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
+[[SpecialFunctions]]
+deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
+git-tree-sha1 = "793793f1df98e3d7d554b65a107e9c9a6399a6ed"
+uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
+version = "1.7.0"
+
 [[StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "3240808c6d463ac46f1c1cd7638375cd22abbccb"
+git-tree-sha1 = "3c76dde64d03699e074ac02eb2e8ba8254d428da"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.2.12"
+version = "1.2.13"
 
 [[Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -1075,16 +1459,21 @@ git-tree-sha1 = "8cbbc098554648c84f79a463c9ff0fd277144b6c"
 uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.10"
 
+[[StatsFuns]]
+deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "95072ef1a22b057b1e80f73c2a89ad238ae4cfff"
+uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
+version = "0.9.12"
+
 [[StructArrays]]
 deps = ["Adapt", "DataAPI", "StaticArrays", "Tables"]
 git-tree-sha1 = "2ce41e0d042c60ecd131e9fb7154a3bfadbf50d3"
 uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 version = "0.6.3"
 
-[[Suppressor]]
-git-tree-sha1 = "a819d77f31f83e5792a76081eee1ea6342ab8787"
-uuid = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
-version = "0.2.0"
+[[SuiteSparse]]
+deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
+uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 
 [[TOML]]
 deps = ["Dates"]
@@ -1098,9 +1487,9 @@ version = "1.0.1"
 
 [[Tables]]
 deps = ["DataAPI", "DataValueInterfaces", "IteratorInterfaceExtensions", "LinearAlgebra", "TableTraits", "Test"]
-git-tree-sha1 = "1162ce4a6c4b7e31e0e6b14486a6986951c73be9"
+git-tree-sha1 = "fed34d0e71b91734bf0a7e10eb1bb05296ddbcd0"
 uuid = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
-version = "1.5.2"
+version = "1.6.0"
 
 [[Tar]]
 deps = ["ArgTools", "SHA"]
@@ -1109,6 +1498,12 @@ uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 [[Test]]
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[[TranscodingStreams]]
+deps = ["Random", "Test"]
+git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
+uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
+version = "0.9.6"
 
 [[URIs]]
 git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
@@ -1121,6 +1516,11 @@ uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [[Unicode]]
 uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
+
+[[UnsafeArrays]]
+git-tree-sha1 = "038cd6ae292c857e6f91be52b81236607627aacd"
+uuid = "c4a57d5a-5b31-53a6-b365-19f8c011fbd6"
+version = "1.0.3"
 
 [[Wayland_jll]]
 deps = ["Artifacts", "Expat_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg", "XML2_jll"]
@@ -1338,30 +1738,41 @@ version = "0.9.1+5"
 # ╠═1bb58003-a908-4658-bce9-67b892cec480
 # ╟─734f53b8-35df-4da3-a4e3-dc4718239ba0
 # ╟─9a2e6ed7-a398-4717-9a95-732b0337405e
-# ╠═6bf52b00-1881-11ec-2ec9-85c3a45c0752
-# ╠═4d6245c1-566d-4f90-9083-0a61d119dbed
+# ╟─6bf52b00-1881-11ec-2ec9-85c3a45c0752
+# ╟─4d6245c1-566d-4f90-9083-0a61d119dbed
+# ╟─7b32a506-aae5-4af5-ad1f-3a16301d7a2c
 # ╟─3e0dc5d4-ee2b-462a-8f39-ba15c164b5a7
 # ╟─210a0931-91e4-4a4e-8ed4-1be890455b3f
-# ╟─d6565d00-8c19-4f38-86f4-ceaece1e578d
+# ╟─b84cfdb6-855b-4c13-871c-a495a68495a3
+# ╟─13df1f5c-07a7-4528-8dcc-cf650faa520c
+# ╟─d36b49c9-f9b7-4e60-a084-ce7569544fd0
+# ╟─66ed22ac-a715-4ecb-98be-66403e62b486
 # ╟─7ac93c3e-7385-49e3-8a03-bbfebeb862b0
-# ╟─6e37b527-071a-44bd-ab65-a4175c651592
-# ╟─0e859b74-3edb-4336-88cb-1bcf91ca65d0
-# ╟─14034f84-fd6d-470a-8c56-bdbfb92be3ed
+# ╟─4e7045a5-5b82-4af1-9199-f06c99e2692d
 # ╟─533fd3d5-dce3-4d87-b251-09ed696fb9d1
-# ╟─56fa8ff1-99b6-49d9-ac9c-9ab47a213c58
-# ╟─09bffe19-339c-438d-901d-19e3550a840a
-# ╟─a51c1392-315e-4dfd-857d-9c9d33cba642
-# ╟─514b039e-94cf-462b-b78f-53cd7e5e52ab
-# ╟─5dd98c60-d089-4d91-9e72-ac548cfcb5da
-# ╟─fe2f14a9-0beb-429c-8aba-37ea9d83c07a
-# ╟─d1f0f756-4e87-4e0f-b80b-2516e83e3d01
+# ╟─5c88a644-473f-4f81-87bd-b2a5856a539c
+# ╟─70b18cb1-56f0-4d08-b29e-ff8259fd7886
 # ╟─8642a6f6-0185-4f07-8689-725356c7b2c7
-# ╟─479fb280-efe4-4738-8a0b-2f673b37e6ed
-# ╟─8d00ff43-fcd9-43e1-bdbd-9f08d0a4b450
-# ╟─7821d6ce-c95b-40f8-9bab-04a00d1f6a8b
-# ╟─3a384c42-86f7-4b38-8d75-651d54acb0e9
-# ╟─95fa9193-1907-42d4-aeda-8e4e6593f0f5
-# ╟─80bf800d-dbd0-4786-ab04-1900acfde278
+# ╟─5319b650-e0a4-40ec-b0de-39a542142e16
+# ╟─4c33d74d-4a48-4be7-b1f0-8fd9edcf19a8
+# ╟─c86b8a58-5f84-42cf-b4ea-2d0a638588aa
+# ╠═d59e0941-5b9f-40a4-8b52-f05e0df7494b
+# ╠═2561df55-6aea-430f-9466-4c4a52a54990
+# ╟─8ef5645f-c477-473c-9de9-d0c4c4bca856
+# ╟─231d83b3-6706-4823-9cff-f0895a1dabc7
+# ╟─b29369e6-d184-4741-ad57-739af4c9677f
+# ╟─84b1e005-ea4f-46f6-a2f1-4919897268a4
+# ╟─8515eb6f-cac7-4eca-a02e-fb1f07607324
+# ╟─21040d14-f76c-48bb-8f17-da152450e609
+# ╟─d057a510-f3ea-45f2-9194-87d4c671e988
+# ╟─49a30cab-45fe-4ff7-b78f-0badee3c2122
+# ╟─2aacf9af-b3f5-4637-bd57-ad2723c3d0d0
+# ╟─280cff5e-5be0-4362-972d-e6c033cdeafd
+# ╟─debae212-c156-47bd-b78a-01244febe926
+# ╟─14beb5b4-e92a-4c70-adf8-9a30c3d0dd70
+# ╟─4b3eaa5e-9fda-4e24-81ee-aaaad80aaa24
+# ╠═d19488e9-4cf5-4c9f-b70b-c57ba868a60f
+# ╠═80bf800d-dbd0-4786-ab04-1900acfde278
 # ╟─46c3247f-5fd2-427e-a77d-34a992497825
 # ╟─a6c9df5b-638f-4f5d-8dc8-5b77987d77a1
 # ╠═79103498-20f7-44b3-98f9-8392edbae08e
@@ -1374,25 +1785,18 @@ version = "0.9.1+5"
 # ╟─bf5e03fd-2bb4-4c47-a03f-0e6beab6b29e
 # ╟─8dc80971-b6a5-40da-8e7e-f496747f464a
 # ╟─6a2849f9-c079-461f-a7d4-4fc9ecdbe271
-# ╠═fe7004cf-c5cb-4ba0-9e9e-5e411183913c
 # ╟─d4580ae3-5e82-4afa-8c66-e19099706ec7
-# ╟─63e78cdb-afc4-437e-93f2-3f13cdb17983
-# ╟─fffcb1cf-092c-461b-8e94-2890eb69aa88
-# ╟─63bfa366-c0c2-403c-91de-12a5623476ce
 # ╟─bf84d0b3-20c5-4678-8cb9-4c409a336896
 # ╟─cf18e352-5493-4f2b-8f68-93b1c2d38ac1
 # ╟─934f70b5-5871-4911-b0a4-20116217ed84
 # ╟─ee1edd0d-4765-490a-8359-2e1a0c653096
 # ╟─0932cf00-a410-4754-8ec2-d4be02e81e11
-# ╟─13d38903-5d0b-4c5d-84f0-500592feab51
+# ╠═13d38903-5d0b-4c5d-84f0-500592feab51
 # ╟─e05db7bd-5124-430d-92e3-5d9823560e3c
 # ╟─969748ac-bacf-4c6d-89ea-d7fc8d35b93c
 # ╟─c4ba41bc-a03b-4cc4-a1f3-82e5a12d0602
 # ╟─7ca48a2d-eaa6-45ea-93b2-668b41223fa3
 # ╟─4548237d-1abf-48ce-9f9c-323d20dd4fe8
-# ╠═f4ccc737-bc7d-4658-bf86-1e1d3d0b979b
-# ╠═fcd00dc8-02ee-45e3-b36b-7b5bc03caa28
-# ╠═6b6e2371-454d-403b-a6a0-a977cc0afb48
 # ╠═f994ab44-d916-4b04-a3fd-629235c7d5e6
 # ╠═980d4941-f2f2-428f-9cfc-34c0e4b40bb3
 # ╠═4fa1d732-2326-45b9-887d-85489b212751
